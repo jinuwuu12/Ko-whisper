@@ -1,0 +1,222 @@
+import pickle
+import numpy as np
+import pandas as pd
+import librosa as lr
+import soundfile as sf
+import os
+from tqdm import tqdm
+
+class PrepareDataset:
+    def __init__(self, audio_dir :str = './data/audio') -> None:
+        self.VOICE_DIR = audio_dir
+
+    # wav 파일로 변경
+    def pcm2audio(
+            self,
+            audio_path: str,
+            extention: str = 'wav',
+            save_file: bool =True,
+            remove: bool = False, #pcm 파일 삭제 여부
+        ) -> object: # 객체반환
+            buf = None
+            with open(audio_path, 'rb') as tf:
+                buf = tf.read()
+                # zero (0) padding
+                # 경우에 따라서 PCM 파일의 길이가 8bit(1byte)로
+                # 나누어 떨어지지 않는 경우가 있어 0으로 패딩을 더해준다.
+                # 패딩하지 않으면 numpy나 librosa 사용 시 오류가 날 수 있다.
+
+                buf = buf+b'0' if len(buf)%2 else buf
+            pcm_data = np.frombuffer(buf, dtype='int16')
+            wav_data = lr.util.buf_to_float(x=pcm_data, n_bytes=2)
+
+            # 음성 파일을 변환하여 저장: .pcm -> .wav
+            if save_file:
+                save_file_name = audio_path.replace('.pcm', f'.{extention}')
+                sf.write(
+                    file = save_file_name,
+                    data = wav_data,
+                    samplerate=16000,
+                    format='wav',
+                    endian='LITTLE',
+                    subtype='PCM_16'
+                    )
+            
+            # 파일 삭제 옵션
+            if remove:
+                 if os.path.isfile(audio_path):
+                      os.remove(audio_path)
+            
+            return wav_data
+    
+    # 전체 변경
+    def process_audio(
+              self,
+              source_dir: str,
+              remove_original_audio: bool = True,
+    ) -> None:
+         print(f'source_dir: {source_dir}')
+         sub_directories = sorted(os.listdir(source_dir))
+         print(f'Processing audios: {len(sub_directories)} directories')
+         for directory in tqdm(sub_directories, desc=f'Processing directory: {source_dir}'):
+                # 디렉토리 안에 있을 경우에 변환환
+                if os.path.isdir(directory):
+                    files = os.listdir(os.path.join(source_dir, directory))
+                    for file_name in files:
+                        if file_name.endswith('.pcm'):
+                            self.pcm2audio(
+                                audio_path=os.path.join(source_dir, directory, file_name),
+                                extention='wav',
+                                remove= remove_original_audio
+                            )
+                # 디렉토리가 아닐경우에도 변환이 가능함
+                elif os.path.isfile(directory):
+                     file_name = directory
+                     if file_name.endswith('.pcm'):
+                            self.pcm2audio(
+                                audio_path=os.path.join(source_dir, file_name),
+                                extention='wav',
+                                remove= remove_original_audio
+                            )
+
+    # 인코딩 변경
+    def convert_encoding(
+            self,file_path: str)-> None:
+        '''convert file encoding UTF-8 to CP949 '''
+        try:
+            with open(file_path, 'rt', encoding='cp949') as f:
+                lines = f.readlines()
+        except:
+            with open(file_path, 'rt', encoding='utf-8') as f:
+                lines = f.readlines()
+        with open(file_path, 'wt', encoding='utf-8') as f:
+            for line in lines:
+                f.write(line)
+    
+    # 전체 인코딩 변경경
+    def convert_all_encoding(self, target_dir: str)-> None:
+        '''디렉토리 내부의 모든 텍스트 파일을 인코딩 변경'''
+        print(f'Target directory: {target_dir}')
+        sub_directories = sorted(os.listdir(target_dir))
+        num_files =0
+        for directory in tqdm(sub_directories, desc='converting cp949 -> utf-8'):
+            files = os.listdir(os.path.join(target_dir, directory))
+            for file_name in files:
+                if file_name.endswith('.txt'):
+                     self.convert_encoding(
+                          os.path.join(target_dir, directory, file_name)
+                     )
+                     num_files +=1
+        print(f'{num_files} txt files are converted')
+
+    # trn 파일 그룹별로 나누기 
+    def split_whole_data(self, target_file: str)->None:
+        '''
+        전체 데이터 파일(전사파일)을 그룹별로 나눔
+        '''
+        with open(target_file, 'rt', encoding='utf-8') as f:
+            # 모든 라인 다 읽어옴
+            lines = f.readlines()
+            # 데이터 그룹을 만듬 ex)KsponSpeech_01
+            data_group = set()
+
+            for line in lines:
+                data_group.add(line.split('/')[0])
+            # 데이터 그룹을 리스트로 만들고 정렬렬
+            data_group = sorted(list(data_group))
+
+            data_dic = {group: [] for group in data_group} # dict comprehension         
+            for line in lines:
+                data_dic[line.split('/')[0]].append(line)
+
+            # Save file seperately
+            # target_file: data/info/train.trn
+            # 파일 저장을 현재 디렉토리 경로로 지정정
+            save_dir = target_file.split('/')[:-1]
+            save_dir = '/'.join(save_dir)
+
+            for group, line_list in data_dic.items():
+                file_path = os.path.join(save_dir, f'train_{group}.trn')
+                with open(file_path, 'wt', encoding='utf-8') as f:
+                    for text in line_list:
+                        f.write(text)
+                    print(f'File created -> {file_path}')
+                print('Done!')
+
+    # csv와 json 형태 파일로 저장장
+    # from datasets import load_dataset('csv', /data/info/train.csv)
+    def get_dataset_dict(self, file_name:str, extention:str ='wav')-> dict:
+        ''' path_dir에 있는 파일을 dict형으로 가공하여 리턴턴
+            retrun data_dict = {
+                    'audio': ['file_path1', 'file_path2', ...],
+                    'text' : ['text1', 'text2', ...],
+            }   
+        '''
+        data_dic = {'path': [], 'sentence': []}
+        print(f'file name : {file_name}')
+        with open(file_name, 'rt', encoding='utf-8') as f:
+            lines = f.readlines()
+            for line in lines:
+                audio, text = line.split('::')
+                # 공백 문자가 있을 경우를 생각해서 공백 제거
+                audio = audio.strip()
+                # join 함수가 자동으로 백슬래시를 넣어줌
+                audio = os.path.join(
+                    os.getcwd(), #현재 디렉토리 경로를 붙여줌 절대 경로로 만들어주기 위해 
+                    self.VOICE_DIR.replace('./', ''),
+                    audio
+                )
+                if audio.endswith('.pcm'):
+                    audio = audio.replace('pcm', f'{extention}')
+                text = text.strip()
+                # 전체를 확인하는 지 체크크
+                # print(f'{audio} : {text}')
+
+                data_dic['path'].append(audio)
+                data_dic['sentence'].append(text)
+
+        return data_dic
+    
+
+    
+    def save_trn_to_pkl(self, file_name:str)->None:
+        '''.trn 파일을 Dict로 만든 후 바이너리로 저장'''
+        data_dict = self.get_dataset_dict(file_name=file_name)
+        # pickle file dump
+        file_name_pickle = file_name + '.dic.pkl'
+        with open(file_name_pickle, 'wb') as f:
+            pickle.dump(data_dict,f)
+        print(f'Dataset is saved as pickle file as dictionary')
+        print(f'Dataset path : {file_name_pickle}')
+
+    def save_trn_to_csv(self, file_name:str)->None:
+        ''' .trn 파일을 .csv로 저장'''
+        print(f'경로 확인: {file_name}')
+        data_dict = self.get_dataset_dict(file_name=file_name)
+        # csv file dump
+        file_name_csv = file_name.split('.')[:-1]
+        file_name_csv = ''.join(file_name_csv) +'.csv'
+        print(f'경로 확인: {file_name_csv}')
+        if file_name_csv.startswith('./'):
+            file_name_csv.replace('./','')
+        data_frm = pd.DataFrame(data_dict)
+        data_frm.to_csv(file_name_csv, index=False, header=False)
+        print(f'Dataset is saved as csv file as dictionary')
+        print(f'Dataset path : {file_name_csv}')
+
+
+
+
+# 테스트를 위한 자기 호출 
+if __name__ == '__main__':
+    # audio = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.pcm'
+    # prepareds = PrepareDataset()
+    # prepareds.pcm2audio(audio_path=audio, remove=True)
+    # source_dir = 'data/audio/KsponSpeech_01'
+    # prepareds = PrepareDataset()
+    # prepareds.process'_audio(source_dir=source_dir)
+    # text_file = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.txt'
+    target_file = 'data\info\eval_clean.trn'
+    prepareds = PrepareDataset()
+    prepareds.save_trn_to_csv(target_file)
+    
