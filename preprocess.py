@@ -40,6 +40,7 @@ def file_process(config) -> None:
     if config.convert_all_encoding:
         if not config.target_dir:
             print('If ')
+            return
         preprocessor.convert_all_encoding(config.target_dir)
 
     if config.remove_all_text_files:
