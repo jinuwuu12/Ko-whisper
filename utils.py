@@ -1,4 +1,5 @@
 import pickle
+from random import shuffle
 import numpy as np
 import pandas as pd
 import librosa as lr
@@ -49,6 +50,23 @@ class PrepareDataset:
             
             return wav_data
     
+    # 평가 오디오 데이터 전처리 
+    def eval_audio_process(
+            self,
+            source_dir : str,
+            remove_original_audio:bool = True,
+    )-> None:
+        print(f'source dir: {source_dir}')
+        audio_files = os.listdir(source_dir)
+        for audio in tqdm(audio_files, desc=f'Processing directory: {audio_files}'):
+            file_name = audio
+            if file_name.endswith('.pcm'):
+                self.pcm2audio(
+                    audio_path=os.path.join(source_dir, file_name),
+                    extention='wav',
+                    remove= remove_original_audio
+                )
+    
     # 전체 변경
     def process_audio(
               self,
@@ -80,8 +98,7 @@ class PrepareDataset:
                             )
 
     # 인코딩 변경
-    def convert_encoding(
-            self,file_path: str)-> None:
+    def convert_encoding(self,file_path: str)-> None:
         '''convert file encoding UTF-8 to CP949 '''
         try:
             with open(file_path, 'rt', encoding='cp949') as f:
@@ -143,12 +160,11 @@ class PrepareDataset:
                     print(f'File created -> {file_path}')
                 print('Done!')
 
-    # csv와 json 형태 파일로 저장장
     # from datasets import load_dataset('csv', /data/info/train.csv)
     def get_dataset_dict(self, file_name:str, extention:str ='wav')-> dict:
         ''' path_dir에 있는 파일을 dict형으로 가공하여 리턴턴
             retrun data_dict = {
-                    'audio': ['file_path1', 'file_path2', ...],
+                    'audio': ['file_path1', 'file_path2', ...], 
                     'text' : ['text1', 'text2', ...],
             }   
         '''
@@ -177,8 +193,7 @@ class PrepareDataset:
 
         return data_dic
     
-
-    
+    # pkl 형태의 파일로 저장 
     def save_trn_to_pkl(self, file_name:str)->None:
         '''.trn 파일을 Dict로 만든 후 바이너리로 저장'''
         data_dict = self.get_dataset_dict(file_name=file_name)
@@ -188,7 +203,8 @@ class PrepareDataset:
             pickle.dump(data_dict,f)
         print(f'Dataset is saved as pickle file as dictionary')
         print(f'Dataset path : {file_name_pickle}')
-
+    
+    # csv 형태의 파일로 저장장
     def save_trn_to_csv(self, file_name:str)->None:
         ''' .trn 파일을 .csv로 저장'''
         print(f'경로 확인: {file_name}')
@@ -204,6 +220,58 @@ class PrepareDataset:
         print(f'Dataset is saved as csv file as dictionary')
         print(f'Dataset path : {file_name_csv}')
 
+    # Train/Test set 분리 
+    def split_train_test(self, target_file: str, train_size: float = 0.8) -> None:
+        '''입력 파일(.trn)을 train/test 분류하여 저장
+            if train_size is 0.8,
+                train:test = 80%:20%
+        '''
+        with open(target_file, 'rt', encoding='utf-8') as f:
+            data = f.readlines()
+            train_num = int(len(data) * train_size)
+        '''
+        만약 헤더가 있을 경우 처리해줘야 함 현재는 csv 변환시에 header = False로 지정해 놓음/
+        여기서는 필요없음
+        '''
+        shuffle(data)
+        data_train = sorted(data[0:train_num])
+        data_test = sorted(data[train_num:])
+
+        # train_set 파일 저장
+        train_file = target_file.split('.')[:-1]
+        train_file = ''.join(train_file) + '_train.csv'
+        if target_file.startswith('.'):
+            train_file = '.' + train_file
+        with open(train_file, 'wt', encoding='utf-8')as f:
+            for line in data_train:
+                f.write(line)
+        print(f'Train_dataset saved -> {train_file} ({train_size*100}%)')
+
+        # test_set 파일 저장
+        test_file = target_file.split('.')[:-1]
+        test_file = ''.join(test_file) + '_test.csv'
+        if target_file.startswith('.'):
+            test_file = '.' +test_file
+        with open(test_file, 'wt', encoding='utf-8')as f:
+            for line in data_test:
+                f.write(line)
+        print(f'Test_dataset saved -> {test_file} ({(1.0-train_size)*100:.1f}%)')
+    
+    # 디렉토리 내부의 모든 텍스트 파일을 삭제 
+    def remove_all_test_files(self, target_dir: str, extention: str = '.txt') -> None:
+        print(f'Target_directory : {target_dir}')
+        sub_directories = sorted(os.listdir(target_dir))
+        num_files = 0
+        for directory in tqdm(sub_directories, desc=f'Delete all {extention} files'):
+            files = os.listdir(os.path.join(target_dir, directory))
+            for file_name in files:
+                if file_name.endswith(f'{extention}'):
+                    os.remove(
+                        os.path.join(target_dir, directory, file_name)
+                    )
+                    num_files += 1
+        print(f'Removed {num_files} {extention} files is removed')
+    
 
 
 
@@ -216,7 +284,7 @@ if __name__ == '__main__':
     # prepareds = PrepareDataset()
     # prepareds.process'_audio(source_dir=source_dir)
     # text_file = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.txt'
-    target_file = 'data\info\eval_clean.trn'
+    target_file = r'data\audio\KsponSpeech_01'
     prepareds = PrepareDataset()
-    prepareds.save_trn_to_csv(target_file)
+    prepareds.remove_all_test_files(target_file)
     
