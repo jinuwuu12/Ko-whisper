@@ -226,6 +226,7 @@ class PrepareDataset:
         '''입력 파일(.trn)을 train/test 분류하여 저장
             if train_size is 0.8,
                 train:test = 80%:20%
+            eng) Whisper model require header columns for example file_path/sentence
         '''
         with open(target_file, 'rt', encoding='utf-8') as f:
             data = f.readlines()
