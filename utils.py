@@ -216,7 +216,8 @@ class PrepareDataset:
         if file_name_csv.startswith('./'):
             file_name_csv.replace('./','')
         data_frm = pd.DataFrame(data_dict)
-        data_frm.to_csv(file_name_csv, index=False, header=False)
+        # header = True -> Whisper input에서 헤더 정보를 사용하기 때문에 True로 설정해줘야함
+        data_frm.to_csv(file_name_csv, index=False, header=True)
         print(f'Dataset is saved as csv file as dictionary')
         print(f'Dataset path : {file_name_csv}')
 
@@ -229,10 +230,11 @@ class PrepareDataset:
         with open(target_file, 'rt', encoding='utf-8') as f:
             data = f.readlines()
             train_num = int(len(data) * train_size)
-        '''
-        만약 헤더가 있을 경우 처리해줘야 함 현재는 csv 변환시에 header = False로 지정해 놓음/
-        여기서는 필요없음
-        '''
+            header =None
+            if target_file.endswith('.csv'):
+                header = data[0]
+                data = data[1:]
+                train_num = int(len(data)*train_size)
         shuffle(data)
         data_train = sorted(data[0:train_num])
         data_test = sorted(data[train_num:])
@@ -243,6 +245,8 @@ class PrepareDataset:
         if target_file.startswith('.'):
             train_file = '.' + train_file
         with open(train_file, 'wt', encoding='utf-8')as f:
+            if header:
+                f.write(header)
             for line in data_train:
                 f.write(line)
         print(f'Train_dataset saved -> {train_file} ({train_size*100}%)')
@@ -253,6 +257,8 @@ class PrepareDataset:
         if target_file.startswith('.'):
             test_file = '.' +test_file
         with open(test_file, 'wt', encoding='utf-8')as f:
+            if header:
+                f.write(header)
             for line in data_test:
                 f.write(line)
         print(f'Test_dataset saved -> {test_file} ({(1.0-train_size)*100:.1f}%)')
@@ -272,7 +278,9 @@ class PrepareDataset:
                     num_files += 1
         print(f'Removed {num_files} {extention} files is removed')
     
-
+class TrainDataset:
+    def __init__(self):
+        pass
 
 
 # 테스트를 위한 자기 호출 
