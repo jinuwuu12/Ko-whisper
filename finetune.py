@@ -59,7 +59,7 @@ class WhisperTrainer:
             self.pretrained_model = config.pretrained_model
         else:
             print('Pre-trained model is not given....')
-            print(f'We will set pre-trained model same to --base-model (-b): {config.base_model}')
+            print(f'\nWe will set pre-trained model same to --base-model (-b): {config.base_model}')
             self.pretrained_model = config.base_model
 
         self.output_dir = get_unique_directory(
