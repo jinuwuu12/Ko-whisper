@@ -1,3 +1,4 @@
+from datetime import datetime
 import pickle
 from random import shuffle
 import numpy as np
@@ -6,6 +7,16 @@ import librosa as lr
 import soundfile as sf
 import os
 from tqdm import tqdm
+
+def get_unique_directory(dir_name : str, model_name : str) -> str:
+    '''입력된 디렉토리 이름에 날짜/ 시간 정보를 추가해서 리턴'''
+    model_name = model_name.split('/')[-1]
+    now = datetime.now().strftime('%Y-%m-%d-%H%M')
+
+    return os.path.join(dir_name, f'{model_name}-{now}')
+
+
+
 
 class PrepareDataset:
     def __init__(self, audio_dir :str = './data/audio') -> None:
@@ -279,9 +290,7 @@ class PrepareDataset:
                     num_files += 1
         print(f'Removed {num_files} {extention} files is removed')
     
-class TrainDataset:
-    def __init__(self):
-        pass
+
 
 
 # 테스트를 위한 자기 호출 

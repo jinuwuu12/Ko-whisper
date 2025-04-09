@@ -59,10 +59,8 @@ def get_parser():
     sub_parser = parser.add_subparsers(title='sub_command')
 
     # 오디오 전처리를 위한 파서 -> Parser for sub-command 'audio'
-    parser_audio = sub_parser.add_parser(
-        'audio',
-        help='sub-command for audio precessing'
-    )
+    parser_audio = sub_parser.add_parser('audio',help='sub-command for audio precessing')
+
     parser_audio.add_argument(
         '--target-dir', '-t',
         required = True,
@@ -72,14 +70,13 @@ def get_parser():
         '--remove-original-audio', '-r',
         action = 'store_true',
     )
+    
     parser_audio.set_defaults(func = audio_process)
 
     # 파일 전처리를 위한 파서 -> Parser for sub-command 'file'
-    parser_file = sub_parser.add_parser(
-        'file',
-        help = 'handling txt encoding, generate pkl/csv file,\
-            or split file (train/test)'
-    )
+    parser_file = sub_parser.add_parser('file', 
+        help = 'handling txt encoding, generate pkl/csv file,or split file (train/test)')
+    
     parser_file.add_argument(
         '--target-file', '-tf',
         help='Target file name for processing'
@@ -133,6 +130,8 @@ def get_parser():
     )
 
     parser_file.set_defaults(func = file_process)
+
+    
     config = parser.parse_args()
     return config
 
