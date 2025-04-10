@@ -33,7 +33,8 @@ def get_config() -> argparse.ArgumentParser:
                         )
     parser.add_argument('--finetuned-model-dir', '-ftm',
                         required=True,
-                        help='Directory for saving fine-tuned model (best model after train)'
+                        help='Directory for saving fine-tuned model \
+                        (best model after train)'
                         )
     
     # train, test dataset
@@ -161,3 +162,21 @@ if __name__ =='__main__':
     trainer = WhisperTrainer(config)
     result = trainer.load_dataset()
     print(result)
+    print(result['train'][0]['sentence'])
+
+
+    input_str = result['train'][0]['sentence']
+    labels = trainer.tokenizer(input_str).input_ids
+    print(f'labels : {labels}')
+
+
+    decoded_with_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=False)
+    decoded_str_without_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=True)
+    print()
+    print(f"Input:                 {input_str}")
+    print()
+    print(f"Decoded w/ special:    {decoded_with_special_tokens}")
+    print()
+    print(f"Decoded w/out special: {decoded_str_without_special_tokens}")
+    print()
+    print(f"Is equal:             {input_str == decoded_str_without_special_tokens}")
