@@ -10,6 +10,8 @@ import argparse
 from datasets import load_dataset, DatasetDict
 from utils import get_unique_directory
 
+from transformers import WhisperFeatureExtractor, WhisperTokenizer, WhisperProcessor
+
 def get_config() -> argparse.ArgumentParser:
     '''Whisper finetuning args parsing function'''
     parser =argparse.ArgumentParser()
@@ -17,16 +19,19 @@ def get_config() -> argparse.ArgumentParser:
     parser.add_argument('--base-model' , '-b',
                         required=True,
                         help='Base model for tokenizer, processor, feature extractor. \
-                        Ex. openai/whisper-tiny, openai/whisper-small from huggingface')
+                        Ex. openai/whisper-tiny, openai/whisper-small from huggingface'
+                        )
     parser.add_argument('--pretrained-model', '-p',
                         default='',
                         help='pretrained model from hugging face or local \
-                            if you trained several times you can use it')
+                            if you trained several times you can use it'
+                            )
     parser.add_argument('--out-dir','-od',
                         required=True,
                         help='If you finished your train your model will \
-                        be saved this folder')
-    parser.add_argument('--finetuned-model-dir', 'ftm',
+                        be saved this folder'
+                        )
+    parser.add_argument('--finetuned-model-dir', '-ftm',
                         required=True,
                         help='Directory for saving fine-tuned model (best model after train)'
                         )
@@ -34,14 +39,26 @@ def get_config() -> argparse.ArgumentParser:
     # train, test dataset
     parser.add_argument('--train-set', '-train', 
                         required=True, 
-                        help='Train dataset name (file name or file path)')
+                        help='Train dataset name (file name or file path)'
+                        )
     parser.add_argument('--valid-set', '-valid', 
                         required=True, 
-                        help='Train dataset name (file name or file path)')
+                        help='Train dataset name (file name or file path)'
+                        )
     parser.add_argument('--test-set', '-test', 
                         required=True, 
-                        help='Train dataset name (file name or file path)')
+                        help='Train dataset name (file name or file path)'
+                        )
     
+    # language select
+    parser.add_argument('--language',
+                        default= 'Korean',
+                        help='select tokenizer language that profit your data'
+                        )
+    parser.add_argument('--task',
+                        default='transcribe',
+                        help = 'you can choose transcribe(default) or translate'
+                        )
     config = parser.parse_args()
     return config
 
@@ -63,19 +80,34 @@ class WhisperTrainer:
             self.pretrained_model = config.base_model
 
         self.output_dir = get_unique_directory(
-            dir_name=config.output_dir, 
-            model_name=self.pretrained_model
+            dir_name = config.out_dir, 
+            model_name = self.pretrained_model
             )
          
         self.finetuned_model_dir = get_unique_directory(
-            dir_name=config.finetuned_model_dir,
-            model_name=self.pretrained_model
+            dir_name = config.finetuned_model_dir,
+            model_name = self.pretrained_model
             )
         print(f'\nTraining outputs will be saved -> {self.output_dir}')
         print(f'Fine-tuned model will be saved -> {self.finetuned_model_dir}\n')
 
+        # Feature Extractor, Tokenizer
+        self.feature_extractor = WhisperFeatureExtractor.from_pretrained(
+            pretrained_model_name_or_path = config.base_model
+            )
+        
+        self.tokenizer = WhisperTokenizer.from_pretrained(
+            pretrained_model_name_or_path = config.base_model, 
+            language = config.language, 
+            task = config.task,
+            )
 
-
+        #Processor 
+        self.processor = WhisperProcessor.from_pretrained(
+            pretrained_model_name_or_path = config.base_model,
+            language = config.language, 
+            task = config.task,
+            )
 
 
     def load_dataset(self, )-> DatasetDict:
