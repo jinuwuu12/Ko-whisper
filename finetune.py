@@ -7,8 +7,11 @@ Written by: Prof. Jin u HA
 License: MIT license
 '''
 import argparse
+import numpy as np
 from datasets import load_dataset, DatasetDict
 from utils import get_unique_directory
+from scipy.io.wavfile import read
+
 
 from transformers import WhisperFeatureExtractor, WhisperTokenizer, WhisperProcessor
 
@@ -60,6 +63,11 @@ def get_config() -> argparse.ArgumentParser:
                         default='transcribe',
                         help = 'you can choose transcribe(default) or translate'
                         )
+    parser.add_argument('--sampling-rate', '-sample',
+                        type=int,
+                        default=16000,
+                        help='wav files sampling rate'
+                        )
     config = parser.parse_args()
     return config
 
@@ -92,7 +100,7 @@ class WhisperTrainer:
         print(f'\nTraining outputs will be saved -> {self.output_dir}')
         print(f'Fine-tuned model will be saved -> {self.finetuned_model_dir}\n')
 
-        # Feature Extractor, Tokenizer
+        # Feature Extractor, Tokenizer 등록
         self.feature_extractor = WhisperFeatureExtractor.from_pretrained(
             pretrained_model_name_or_path = config.base_model
             )
@@ -103,7 +111,7 @@ class WhisperTrainer:
             task = config.task,
             )
 
-        #Processor 
+        #Processor 등록 
         self.processor = WhisperProcessor.from_pretrained(
             pretrained_model_name_or_path = config.base_model,
             language = config.language, 
@@ -130,7 +138,7 @@ class WhisperTrainer:
             path='csv',
             name='aihub-ksponSpeech_dataset',
             split='train',
-            data_files=self.config.train_set,
+            data_files=self.config.test_set,
         )
         return dataset
 
@@ -138,13 +146,31 @@ class WhisperTrainer:
         '''Prepare evaluation metric (WER, CER, MOS)'''
         pass
 
-    def prepare_dataset(self, batch):
+    def prepare_dataset(self, batch) -> object:
         '''Get input features with numpy array & sentence label'''
-        pass
+        # load and resample audio data from 48 to 16kHz
+        audio = batch["path"]
+        _ , data = read(audio)
+        audio_array = np.array(data, dtype=np.float32)
 
-    def process_dataset(self, dataset) -> tuple:
+        # compute log-Mel input features from input audio array
+        batch["input_features"] = self.feature_extractor(
+            audio_array, 
+            sampling_rate = self.config.sampling_rate
+            ).input_features[0] # 왜 0번째를 들고와?? 이거 ㄹㅇ 코드 까봐야함 
+
+        # encode target text to label ids 
+        batch["labels"] = self.tokenizer(batch["sentence"]).input_ids
+        return batch
+
+    def process_dataset(self, dataset: DatasetDict) -> tuple:
         '''Process loaded dataset applying prepare_dataset()'''
-        pass
+        # num_proc는 cpu 코어 갯수에 따라 달라짐짐
+        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=20)
+        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=20)
+        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=20)
+        
+        return (train, valid, test)
 
     def enforce_fine_tune_lang(self) -> None:
         '''Enforce fine-tune language'''
@@ -172,11 +198,10 @@ if __name__ =='__main__':
 
     decoded_with_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=False)
     decoded_str_without_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=True)
-    print()
     print(f"Input:                 {input_str}")
-    print()
     print(f"Decoded w/ special:    {decoded_with_special_tokens}")
-    print()
     print(f"Decoded w/out special: {decoded_str_without_special_tokens}")
-    print()
     print(f"Is equal:             {input_str == decoded_str_without_special_tokens}")
+
+    train, valid, test = trainer.process_dataset(result)
+    print(train, valid, test)
