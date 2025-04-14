@@ -8,12 +8,19 @@ License: MIT license
 '''
 import argparse
 import numpy as np
+import evaluate
 from datasets import load_dataset, DatasetDict
+from trainer.collator import DataCollatorSpeechSeq2SeqWithPadding
 from utils import get_unique_directory
 from scipy.io.wavfile import read
 
 
-from transformers import WhisperFeatureExtractor, WhisperTokenizer, WhisperProcessor
+from transformers import (
+    WhisperFeatureExtractor, 
+    WhisperTokenizer, 
+    WhisperProcessor, 
+    WhisperForConditionalGeneration,
+    )
 
 def get_config() -> argparse.ArgumentParser:
     '''Whisper finetuning args parsing function'''
@@ -68,6 +75,11 @@ def get_config() -> argparse.ArgumentParser:
                         default=16000,
                         help='wav files sampling rate'
                         )
+    parser.add_argument('--metric',
+                        type=str, 
+                        default='cer',
+                        help='select your evaluation-rate matric'
+                        )
     config = parser.parse_args()
     return config
 
@@ -76,7 +88,7 @@ class WhisperTrainer:
     def __init__(self, config) -> None:
         # 이렇게 해야 클래스 전체에서 config를 사용할 수 있음
         self.config = config
-
+        
         # 사전 학습 모델 - 2개
         # Base model -> tokenizer, feature_exrtactor ,processor
         # pre-trained model -> model for fine-tuning
@@ -110,14 +122,20 @@ class WhisperTrainer:
             language = config.language, 
             task = config.task,
             )
+        # 모델 등록
+        self.model = WhisperForConditionalGeneration.from_pretrained(self.pretrained_model)
 
-        #Processor 등록 
+        # Processor 등록 
         self.processor = WhisperProcessor.from_pretrained(
             pretrained_model_name_or_path = config.base_model,
             language = config.language, 
             task = config.task,
             )
-
+        # Label Collator 등록
+        self.data_collator = DataCollatorSpeechSeq2SeqWithPadding(
+            processor=self.processor,
+            decoder_start_token_id=self.model.config.decoder_start_token_id,
+        )
 
     def load_dataset(self, )-> DatasetDict:
         '''Build dataset containing train/valid.test sets'''
@@ -144,7 +162,14 @@ class WhisperTrainer:
 
     def compute_metrics(self, pred) -> dict:
         '''Prepare evaluation metric (WER, CER, MOS)'''
-        pass
+        metric = evaluate.load(self.config.metric)
+        pred_ids = pred.predictions
+        label_ids = pred.label_ids
+        label_ids[label_ids == -100] = self.tokenizer.pad_token_id
+        pred_str = self.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = self.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+        cer = 100 * metric.compute(predictions=pred_str, references=label_str)
+        return {"cer": cer}
 
     def prepare_dataset(self, batch) -> object:
         '''Get input features with numpy array & sentence label'''
@@ -166,14 +191,27 @@ class WhisperTrainer:
     def process_dataset(self, dataset: DatasetDict) -> tuple:
         '''Process loaded dataset applying prepare_dataset()'''
         # num_proc는 cpu 코어 갯수에 따라 달라짐짐
-        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=20)
-        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=20)
-        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=20)
+        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=32)
+        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=32)
+        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=32)
         
         return (train, valid, test)
 
     def enforce_fine_tune_lang(self) -> None:
         '''Enforce fine-tune language'''
+        # 언어 강제 지정
+        self.model.config.suppress_tokens = []
+        self.model.generation_config.suppress_tokens = []
+        # model_config_issue -> https://github.com/huggingface/transformers/issues/21994
+        self.model.config.forced_decoder_ids = self.processor.tokenizer.get_decoder_prompt_ids(
+            language=config.language,
+            task=config.task,
+        )
+        # generations_config issue -> https://github.com/huggingface/transformers/issues/21937
+        self.model.generation_config.forced_decoder_ids = self.processor.tokenizer.get_decoder_prompt_ids(
+            language=config.language,
+            task=config.task,
+        )
 
     def create_trainer(self, train, valid) -> None:
         '''Create seq2seq trainer'''
