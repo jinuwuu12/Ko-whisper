@@ -7,8 +7,10 @@ Written by: Prof. Jin u HA
 License: MIT license
 '''
 import argparse
+import pprint
 import numpy as np
 import evaluate
+import torch
 from datasets import load_dataset, DatasetDict
 from trainer.collator import DataCollatorSpeechSeq2SeqWithPadding
 from utils import get_unique_directory
@@ -20,6 +22,8 @@ from transformers import (
     WhisperTokenizer, 
     WhisperProcessor, 
     WhisperForConditionalGeneration,
+    Seq2SeqTrainingArguments,
+    Seq2SeqTrainer,
     )
 
 def get_config() -> argparse.ArgumentParser:
@@ -137,6 +141,30 @@ class WhisperTrainer:
             decoder_start_token_id=self.model.config.decoder_start_token_id,
         )
 
+        # train args 등록록
+        self.training_args = Seq2SeqTrainingArguments(
+            output_dir = self.output_dir,                   # change to a repo name of your choice
+            per_device_train_batch_size = 32,               # select your batch size
+            gradient_accumulation_steps = 1,                # increase by 2x for every 2x decrease in batch size
+            learning_rate=1e-5,
+            warmup_steps=500,                               # transformer는 adam이라는 옵티마이저를 사용 워밍업하는개념
+            max_steps=5000,
+            gradient_checkpointing=True,
+            fp16 = True,                                    # 부동소수점 자릿수 defalut: fp32 -> fp16 학습이 빨라진다고 함 
+            eval_strategy="steps",
+            per_device_eval_batch_size=16,
+            predict_with_generate=True,
+            generation_max_length=225,
+            save_steps=1000,
+            eval_steps=1000,
+            logging_steps=100,                               # 25 step 마다 output에 저장 (용량이 크니 주의해야함)
+            # report_to=["tensorboard"],
+            load_best_model_at_end=True,                     # 마지막에 베스트 모델 저장
+            metric_for_best_model=config.metric, 
+            greater_is_better=False, 
+            push_to_hub=False,                              # push hugging-face hub
+        )
+
     def load_dataset(self, )-> DatasetDict:
         '''Build dataset containing train/valid.test sets'''
         dataset = DatasetDict()
@@ -160,6 +188,7 @@ class WhisperTrainer:
         )
         return dataset
 
+    # chracter morphs 별 metric 
     def compute_metrics(self, pred) -> dict:
         '''Prepare evaluation metric (WER, CER, MOS)'''
         metric = evaluate.load(self.config.metric)
@@ -196,7 +225,8 @@ class WhisperTrainer:
         test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=32)
         
         return (train, valid, test)
-
+    
+    # 한국어 강제 지정
     def enforce_fine_tune_lang(self) -> None:
         '''Enforce fine-tune language'''
         # 언어 강제 지정
@@ -213,33 +243,54 @@ class WhisperTrainer:
             task=config.task,
         )
 
-    def create_trainer(self, train, valid) -> None:
+    def create_trainer(self, train, valid) -> Seq2SeqTrainer:
         '''Create seq2seq trainer'''
-        pass
+        return Seq2SeqTrainer(
+            args = self.training_args,
+            model = self.model,
+            train_dataset = train,
+            eval_dataset = valid,
+            data_collator = self.data_collator,
+            compute_metrics = self.compute_metrics,
+            tokenizer=self.processor.feature_extractor,
+        )
 
-    def run(self)-> None:
+    def run(self) -> None:
         '''Run trainer'''
-
+        self.enforce_fine_tune_lang()
+        dataset = self.load_dataset()
+        train, valid, test = self.process_dataset(dataset=dataset)
+        trainer = self.create_trainer(train, valid)
+        print('\nStart training...\n')
+        trainer.train()
+        trainer.save_model(self.finetuned_model_dir)
+        print('\nStart testing performance using test_dataset...\n')
+        result_dic = trainer.evaluate(eval_dataset=test)
+        pprint(result_dic)
+        print('\nClearing GPU cache')
+        torch.cuda.empty_cache()
+        print('\nTraining completed!!!')
 
 if __name__ =='__main__':
+#     config = get_config()
+#     trainer = WhisperTrainer(config)
+#     result = trainer.load_dataset()
+#     print(result)
+#     print(result['train'][0]['sentence'])
+#     input_str = result['train'][0]['sentence']
+#     labels = trainer.tokenizer(input_str).input_ids
+#     print(f'labels : {labels}')
+#     decoded_with_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=False)
+#     decoded_str_without_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=True)
+#     print(f"Input:                 {input_str}")
+#     print(f"Decoded w/ special:    {decoded_with_special_tokens}")
+#     print(f"Decoded w/out special: {decoded_str_without_special_tokens}")
+#     print(f"Is equal:             {input_str == decoded_str_without_special_tokens}")
+#     train, valid, test = trainer.process_dataset(result)
+#     print(train, valid, test)
+
+
     config = get_config()
-    trainer = WhisperTrainer(config)
-    result = trainer.load_dataset()
-    print(result)
-    print(result['train'][0]['sentence'])
+    trainer = WhisperTrainer(config=config)
+    trainer.run()
 
-
-    input_str = result['train'][0]['sentence']
-    labels = trainer.tokenizer(input_str).input_ids
-    print(f'labels : {labels}')
-
-
-    decoded_with_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=False)
-    decoded_str_without_special_tokens = trainer.tokenizer.decode(labels, skip_special_tokens=True)
-    print(f"Input:                 {input_str}")
-    print(f"Decoded w/ special:    {decoded_with_special_tokens}")
-    print(f"Decoded w/out special: {decoded_str_without_special_tokens}")
-    print(f"Is equal:             {input_str == decoded_str_without_special_tokens}")
-
-    train, valid, test = trainer.process_dataset(result)
-    print(train, valid, test)
