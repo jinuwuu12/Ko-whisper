@@ -219,9 +219,14 @@ class WhisperTrainer:
 
     def process_dataset(self, dataset: DatasetDict) -> tuple:
         '''Process loaded dataset applying prepare_dataset()'''
-        # num_proc는 cpu 코어 갯수에 따라 달라짐짐
+        # num_proc는 cpu 코어 갯수에 따라 달라짐
+        print(dataset['train'])
         train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=32)
+        print(f'train cache file root :{train.cache_files}')
+        print(dataset['valid'])
         valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=32)
+        print(f'valid cache file root :{valid.cache_files}')
+        print(dataset['test'])
         test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=32)
         
         return (train, valid, test)
@@ -255,6 +260,33 @@ class WhisperTrainer:
             tokenizer=self.processor.feature_extractor,
         )
 
+
+    # pprint 오류로 인한 테스트 데이터 검증 코드 
+    # def evaluate_test_only(self):
+    #     # 모델 & processor 로드
+    #     self.model = '/model_finetuned/whisper-small-2025-04-15-1235'
+    #     self.processor = '/model_finetuned/whisper-small-2025-04-15-1235'
+
+    #     # 테스트셋 준비
+    #     dataset = self.load_dataset()
+    #     _, _, test = self.process_dataset(dataset=dataset)
+
+    #     # Trainer 구성
+    #     trainer = Seq2SeqTrainer(
+    #         model=self.model,
+    #         args=self.training_args,
+    #         tokenizer=self.processor.feature_extractor,
+    #         data_collator=self.data_collator,
+    #         compute_metrics = self.compute_metrics,
+    #     )
+
+    #     # 테스트셋 평가
+    #     print('\nStart testing performance using test_dataset...\n')
+    #     result_dic = trainer.evaluate(eval_dataset=test)
+    #     pprint(result_dic)
+
+
+
     def run(self) -> None:
         '''Run trainer'''
         self.enforce_fine_tune_lang()
@@ -266,12 +298,13 @@ class WhisperTrainer:
         trainer.save_model(self.finetuned_model_dir)
         print('\nStart testing performance using test_dataset...\n')
         result_dic = trainer.evaluate(eval_dataset=test)
-        pprint(result_dic)
+        pprint.pprint(result_dic)
         print('\nClearing GPU cache')
         torch.cuda.empty_cache()
         print('\nTraining completed!!!')
 
 if __name__ =='__main__':
+    config = get_config()
 #     config = get_config()
 #     trainer = WhisperTrainer(config)
 #     result = trainer.load_dataset()
@@ -290,7 +323,7 @@ if __name__ =='__main__':
 #     print(train, valid, test)
 
 
-    config = get_config()
-    trainer = WhisperTrainer(config=config)
-    trainer.run()
+    whisperClass = WhisperTrainer(config=config)
+    whisperClass.run()
+
 

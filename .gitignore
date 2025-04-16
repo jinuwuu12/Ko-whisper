@@ -2,6 +2,10 @@
 data/audio/
 data/info/
 blogclone/ipynb
+model_archive/
+model_finetuned/
+model_output/
+data/fleurs/
 data/audio/KsponSpeech_01/KsponSpeech_0001/KsponSpeech_000001.txt
 data/audio/KsponSpeech_01/KsponSpeech_0001/KsponSpeech_000001.wav
 data/audio/KsponSpeech_01/KsponSpeech_0001/KsponSpeech_000002.txt
