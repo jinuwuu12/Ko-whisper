@@ -41,7 +41,7 @@ def get_config() -> argparse.ArgumentParser:
                             if you trained several times you can use it'
                             )
     parser.add_argument('--out-dir','-od',
-                        required=True,
+                        default='./model_output',
                         help='If you finished your train your model will \
                         be saved this folder'
                         )
@@ -186,6 +186,7 @@ class WhisperTrainer:
             split='train',
             data_files=self.config.test_set,
         )
+        print(dataset['train']['path'][0])
         return dataset
 
     # chracter morphs 별 metric 
@@ -324,6 +325,6 @@ if __name__ =='__main__':
 
 
     whisperClass = WhisperTrainer(config=config)
-    whisperClass.run()
+    whisperClass.load_dataset()
 
 

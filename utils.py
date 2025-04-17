@@ -7,6 +7,8 @@ import librosa as lr
 import soundfile as sf
 import os
 from tqdm import tqdm
+from datasets import load_dataset, DatasetDict
+from datasets import Audio
 
 def get_unique_directory(dir_name : str, model_name : str) -> str:
     '''입력된 디렉토리 이름에 날짜/ 시간 정보를 추가해서 리턴'''
@@ -14,8 +16,6 @@ def get_unique_directory(dir_name : str, model_name : str) -> str:
     now = datetime.now().strftime('%Y-%m-%d-%H%M')
 
     return os.path.join(dir_name, f'{model_name}-{now}')
-
-
 
 
 class PrepareDataset:
@@ -290,8 +290,57 @@ class PrepareDataset:
                     num_files += 1
         print(f'Removed {num_files} {extention} files is removed')
     
+class LoadHuggingFaceDataset:
+    def __init__(self, ) -> None:
+        print('Loading dataset from Hugging-face')
+    
+    def load_dataset(self, )-> DatasetDict:
+        '''Build dataset from hugging-face dataset'''
+        dataset = DatasetDict()
+        dataset = load_dataset("google/fleurs", "ko_kr")
+        dataset = dataset.remove_columns(['id','num_samples','raw_transcription', 'gender','lang_id','language','lang_group_id','audio'])
+        # dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+        
+        print(dataset['train']['transcription'][0])
+        return dataset
+    
+    def save2csv(self,target_dir)-> None:
+        '''save dataset to csv'''
+        dataset = load_dataset("google/fleurs", "ko_kr")
+        dataset = dataset.remove_columns(['id','num_samples','raw_transcription', 'gender','lang_id','language','lang_group_id','audio'])
+        transcription_lst = dataset['train']['transcription']
+        fleursWav_lst = os.listdir(target_dir)
+        fleursWav_paths = [os.path.join(os.path.abspath(target_dir), fname) for fname in fleursWav_lst]
+        dataFrm = pd.DataFrame({
+            'path' : fleursWav_paths,
+            'sentence' : transcription_lst,
+        })
+        dataFrm.to_csv("data/info/fleurs_transcription.csv", index=False, encoding="utf-8")
+        
+    def save_dataset_audio(self, dataset_name, config_name, split="train", save_dir="./saved_wav", max_samples=None):
+        # 데이터셋 로드
+        dataset = load_dataset(dataset_name, config_name, split=split)
+        # 저장 디렉토리 생성
+        os.makedirs(save_dir, exist_ok=True)
 
+        print(f"[INFO] Saving {split} split of {dataset_name} ({config_name}) to '{save_dir}'")
 
+        for i, sample in enumerate(dataset):
+            if max_samples is not None and i >= max_samples:
+                break
+
+            audio_array = sample["audio"]["array"]
+            sampling_rate = sample["audio"]["sampling_rate"]
+
+            save_path = os.path.join(save_dir, f"{split}_{i:05d}.wav")
+
+            # soundfile을 사용해 저장
+            sf.write(file=save_path, data=audio_array, samplerate=sampling_rate)
+
+            if i % 100 == 0:
+                print(f"  - 저장 경로: {save_path}")
+
+        print("오디오 파일 저장완료")
 
 # 테스트를 위한 자기 호출 
 if __name__ == '__main__':
@@ -302,7 +351,17 @@ if __name__ == '__main__':
     # prepareds = PrepareDataset()
     # prepareds.process'_audio(source_dir=source_dir)
     # text_file = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.txt'
-    target_file = r'data\audio\KsponSpeech_01'
-    prepareds = PrepareDataset()
-    prepareds.remove_all_test_files(target_file)
-    
+    # target_file = r'data\audio\KsponSpeech_01'
+    # prepareds = PrepareDataset()
+    # prepareds.remove_all_test_files(target_file)
+    Dataset = LoadHuggingFaceDataset()
+    # Dataset.save_dataset_audio(
+    #     dataset_name="google/fleurs",
+    #     config_name="ko_kr",
+    #     split="train",
+    #     save_dir="./data/audio/fleurs",
+    #     max_samples=None  # 저장할 개수 제한 (None이면 전체 저장)
+    # )
+
+
+    Dataset.save2csv(target_dir=r'data\audio\fleurs')
