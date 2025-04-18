@@ -9,9 +9,10 @@ License: MIT license
 import argparse
 import pprint
 import numpy as np
+import pandas as pd
 import evaluate
 import torch
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset, DatasetDict, Dataset
 from trainer.collator import DataCollatorSpeechSeq2SeqWithPadding
 from utils import get_unique_directory
 from scipy.io.wavfile import read
@@ -53,15 +54,15 @@ def get_config() -> argparse.ArgumentParser:
     
     # train, test dataset
     parser.add_argument('--train-set', '-train', 
-                        required=True, 
+                        # required=True, 
                         help='Train dataset name (file name or file path)'
                         )
     parser.add_argument('--valid-set', '-valid', 
-                        required=True, 
+                        # required=True, 
                         help='Train dataset name (file name or file path)'
                         )
     parser.add_argument('--test-set', '-test', 
-                        required=True, 
+                        # required=True, 
                         help='Train dataset name (file name or file path)'
                         )
     
@@ -168,38 +169,55 @@ class WhisperTrainer:
     def load_dataset(self, )-> DatasetDict:
         '''Build dataset containing train/valid.test sets'''
         dataset = DatasetDict()
-        dataset['train'] = load_dataset(
-            path='csv',
-            name='aihub-ksponSpeech_dataset',
-            split='train',
-            data_files=self.config.train_set,
-        )
-        dataset['valid'] = load_dataset(
-            path='csv',
-            name='aihub-ksponSpeech_dataset',
-            split='train',
-            data_files=self.config.valid_set,
-        )
-        dataset['test'] = load_dataset(
-            path='csv',
-            name='aihub-ksponSpeech_dataset',
-            split='train',
-            data_files=self.config.test_set,
-        )
-        print(dataset['train']['path'][0])
+        if self.config.train_set:
+            train_df = pd.read_csv(self.config.train_set, encoding='utf-8')
+            dataset['train'] = Dataset.from_pandas(train_df)
+        if self.config.valid_set:
+            valid_df = pd.read_csv(self.config.valid_set, encoding='utf-8')
+            dataset['valid'] = Dataset.from_pandas(valid_df)
+        if self.config.test_set:
+            test_df = pd.read_csv(self.config.test_set, encoding='utf-8')
+            dataset['test'] = Dataset.from_pandas(test_df)
         return dataset
+    
+        # dataset['train'] = load_dataset(
+        #     path='csv',
+        #     name='aihub-ksponSpeech_dataset',
+        #     split='train',
+        #     data_files=self.config.train_set,
+        # )
+        # dataset['valid'] = load_dataset(
+        #     path='csv',
+        #     name='aihub-ksponSpeech_dataset',
+        #     split='train',
+        #     data_files=self.config.valid_set,
+        # )
+        # dataset['test'] = load_dataset(
+        #     path='csv',
+        #     name='aihub-ksponSpeech_dataset',
+        #     split='train',
+        #     data_files=self.config.test_set,
+        # )
+        # print(dataset['train']['path'][0])
+        # return dataset
 
     # chracter morphs 별 metric 
     def compute_metrics(self, pred) -> dict:
         '''Prepare evaluation metric (WER, CER, MOS)'''
-        metric = evaluate.load(self.config.metric)
+        cer_metric = evaluate.load("cer")
+        wer_metric = evaluate.load("wer")
         pred_ids = pred.predictions
         label_ids = pred.label_ids
         label_ids[label_ids == -100] = self.tokenizer.pad_token_id
         pred_str = self.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         label_str = self.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
-        cer = 100 * metric.compute(predictions=pred_str, references=label_str)
-        return {"cer": cer}
+        cer = 100 * cer_metric.compute(predictions=pred_str, references=label_str)
+        wer = 100 * wer_metric.compute(predictions=pred_str, references=label_str)
+        return {
+            "cer": cer,
+            'wer': wer,
+            }
+    
 
     def prepare_dataset(self, batch) -> object:
         '''Get input features with numpy array & sentence label'''
@@ -218,20 +236,50 @@ class WhisperTrainer:
         batch["labels"] = self.tokenizer(batch["sentence"]).input_ids
         return batch
 
-    def process_dataset(self, dataset: DatasetDict) -> tuple:
+    # def process_dataset(self, dataset: DatasetDict) -> tuple:
         '''Process loaded dataset applying prepare_dataset()'''
         # num_proc는 cpu 코어 갯수에 따라 달라짐
         print(dataset['train'])
-        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=32)
+        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=16)
         print(f'train cache file root :{train.cache_files}')
         print(dataset['valid'])
-        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=32)
+        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=16)
         print(f'valid cache file root :{valid.cache_files}')
         print(dataset['test'])
-        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=32)
+        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=16)
         
         return (train, valid, test)
     
+    # 조건부 process_dataset
+    def process_dataset(self, dataset: DatasetDict) -> tuple:
+        train = valid = test = None
+
+        # 왜 cpu 코어 16개를 쓸때보다 4개를 쓸때가 더 빠른가.. 멍청한 컴퓨터녀석
+        if 'train' in dataset:
+            train = dataset['train'].map(
+                function=self.prepare_dataset,
+                remove_columns=dataset['train'].column_names,
+                num_proc=16,
+                load_from_cache_file=False
+            )
+        if 'valid' in dataset:
+            valid = dataset['valid'].map(
+                function=self.prepare_dataset,
+                remove_columns=dataset['valid'].column_names,
+                num_proc=16,
+                load_from_cache_file=False
+            )
+        if 'test' in dataset:
+            test = dataset['test'].map(
+                function=self.prepare_dataset,
+                remove_columns=dataset['test'].column_names,
+                num_proc=16,
+                load_from_cache_file=False
+            )
+
+        return train, valid, test
+    
+
     # 한국어 강제 지정
     def enforce_fine_tune_lang(self) -> None:
         '''Enforce fine-tune language'''
@@ -286,7 +334,35 @@ class WhisperTrainer:
     #     result_dic = trainer.evaluate(eval_dataset=test)
     #     pprint(result_dic)
 
+    def eval(self,) -> None:
+        self.enforce_fine_tune_lang()
 
+        # Load and preprocess dataset
+        dataset = self.load_dataset()
+        _, _, test = self.process_dataset(dataset=dataset)
+
+        # 이코드는 뭘까 지피티가 시켰다.......
+        '''학습을 하지않을 땐 평가전략을 끄란다 /n
+           뭔개소리일까?
+        '''
+        self.training_args.eval_strategy = "no"
+
+        trainer = Seq2SeqTrainer(
+            model=self.model,
+            args=self.training_args,
+            tokenizer=self.processor.feature_extractor,
+            data_collator=self.data_collator,
+            compute_metrics=self.compute_metrics,
+        )
+
+        # Evaluate
+        print('\n start evaluation!!!!\n')
+        result_dic = trainer.evaluate(eval_dataset=test)
+        pprint.pprint(result_dic)
+
+        print('\nClearing GPU cache')
+        torch.cuda.empty_cache()
+        print('\nTraining completed!!!')
 
     def run(self) -> None:
         '''Run trainer'''
@@ -325,6 +401,6 @@ if __name__ =='__main__':
 
 
     whisperClass = WhisperTrainer(config=config)
-    whisperClass.load_dataset()
+    whisperClass.eval()
 
 
