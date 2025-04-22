@@ -306,16 +306,16 @@ class LoadHuggingFaceDataset:
         '''save dataset to csv'''
         dataset = load_dataset("google/fleurs", "ko_kr")
         dataset = dataset.remove_columns(['id','num_samples','raw_transcription', 'gender','lang_id','language','lang_group_id','audio'])
-        transcription_lst = dataset['test']['transcription']
+        transcription_lst = dataset['train']['transcription']
         fleursWav_lst = os.listdir(target_dir)
         fleursWav_paths = [os.path.join(os.path.abspath(target_dir), fname) for fname in fleursWav_lst]
         dataFrm = pd.DataFrame({
             'path' : fleursWav_paths,
             'sentence' : transcription_lst,
         })
-        dataFrm.to_csv("data/info/fleurs_transcription.csv", index=False, encoding="utf-8")
+        dataFrm.to_csv("data/info/fleurs_transcription_train.csv", index=False, encoding="utf-8")
         
-    def save_dataset_audio(self, dataset_name, config_name, split="test", save_dir="./saved_wav", max_samples=None):
+    def save_dataset_audio(self, dataset_name, config_name, split="train", save_dir="./saved_wav", max_samples=None):
         # 데이터셋 로드
         dataset = load_dataset(dataset_name, config_name, split=split)
         # 저장 디렉토리 생성
@@ -356,14 +356,14 @@ if __name__ == '__main__':
     # Dataset.save_dataset_audio(
     #     dataset_name="google/fleurs",
     #     config_name="ko_kr",
-    #     split="test",
-    #     save_dir="./data/audio/fleurs_test",
+    #     split="validation",
+    #     save_dir="./data/audio/fleurs_vaild",
     #     max_samples=None  # 저장할 개수 제한 (None이면 전체 저장)
     # )
 
-    Dataset.save2csv(target_dir=r'data\audio\fleurs_test')
+    Dataset.save2csv(target_dir=r'data\audio\fleurs_train')
     
     # 인코딩 확인하는 코드 
-    with open("data/info/fleurs_transcription.csv", "rb") as f:
-        raw = f.read(10000)  
-        print(chardet.detect(raw))
+    # with open("data/info/fleurs_transcription.csv", "rb") as f:
+    #     raw = f.read(10000)  
+    #     print(chardet.detect(raw))

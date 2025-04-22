@@ -47,7 +47,7 @@ def get_config() -> argparse.ArgumentParser:
                         be saved this folder'
                         )
     parser.add_argument('--finetuned-model-dir', '-ftm',
-                        required=True,
+                        # required=True,
                         help='Directory for saving fine-tuned model \
                         (best model after train)'
                         )
@@ -109,7 +109,7 @@ class WhisperTrainer:
             dir_name = config.out_dir, 
             model_name = self.pretrained_model
             )
-         
+        
         self.finetuned_model_dir = get_unique_directory(
             dir_name = config.finetuned_model_dir,
             model_name = self.pretrained_model
@@ -119,7 +119,8 @@ class WhisperTrainer:
 
         # Feature Extractor, Tokenizer 등록
         self.feature_extractor = WhisperFeatureExtractor.from_pretrained(
-            pretrained_model_name_or_path = config.base_model
+            pretrained_model_name_or_path = config.base_model,
+            return_attention_mask=True,
             )
         
         self.tokenizer = WhisperTokenizer.from_pretrained(
@@ -136,6 +137,7 @@ class WhisperTrainer:
             language = config.language, 
             task = config.task,
             )
+        
         # Label Collator 등록
         self.data_collator = DataCollatorSpeechSeq2SeqWithPadding(
             processor=self.processor,
@@ -145,13 +147,13 @@ class WhisperTrainer:
         # train args 등록록
         self.training_args = Seq2SeqTrainingArguments(
             output_dir = self.output_dir,                   # change to a repo name of your choice
-            per_device_train_batch_size = 32,               # select your batch size
+            per_device_train_batch_size = 32,               # select your batch size 
             gradient_accumulation_steps = 1,                # increase by 2x for every 2x decrease in batch size
             learning_rate=1e-5,
             warmup_steps=500,                               # transformer는 adam이라는 옵티마이저를 사용 워밍업하는개념
             max_steps=5000,
             gradient_checkpointing=True,
-            fp16 = True,                                    # 부동소수점 자릿수 defalut: fp32 -> fp16 학습이 빨라진다고 함 
+            fp16 = True,                                    # 부동소수점 자릿수 defalut: fp32 -> fp16 학습이 빨라진다고 함(AMP)
             eval_strategy="steps",
             per_device_eval_batch_size=16,
             predict_with_generate=True,
@@ -231,9 +233,21 @@ class WhisperTrainer:
             audio_array, 
             sampling_rate = self.config.sampling_rate
             ).input_features[0] # 왜 0번째를 들고와?? 이거 ㄹㅇ 코드 까봐야함 
-
+        
+        # tokenize sentence (with attention mask)
+        masked = self.tokenizer(
+            batch['sentence'],
+            padding='max_length',
+            truncation = True,
+            max_length=128,
+            return_attention_mask=True,
+            return_tensors="pt",
+        )
         # encode target text to label ids 
-        batch["labels"] = self.tokenizer(batch["sentence"]).input_ids
+        # batch["labels"] = self.tokenizer(batch["sentence"]).input_ids
+        batch["labels"] = masked.input_ids[0]
+        batch["label_attention_mask"] = masked.attention_mask[0]
+
         return batch
 
     # def process_dataset(self, dataset: DatasetDict) -> tuple:
@@ -310,30 +324,6 @@ class WhisperTrainer:
         )
 
 
-    # pprint 오류로 인한 테스트 데이터 검증 코드 
-    # def evaluate_test_only(self):
-    #     # 모델 & processor 로드
-    #     self.model = '/model_finetuned/whisper-small-2025-04-15-1235'
-    #     self.processor = '/model_finetuned/whisper-small-2025-04-15-1235'
-
-    #     # 테스트셋 준비
-    #     dataset = self.load_dataset()
-    #     _, _, test = self.process_dataset(dataset=dataset)
-
-    #     # Trainer 구성
-    #     trainer = Seq2SeqTrainer(
-    #         model=self.model,
-    #         args=self.training_args,
-    #         tokenizer=self.processor.feature_extractor,
-    #         data_collator=self.data_collator,
-    #         compute_metrics = self.compute_metrics,
-    #     )
-
-    #     # 테스트셋 평가
-    #     print('\nStart testing performance using test_dataset...\n')
-    #     result_dic = trainer.evaluate(eval_dataset=test)
-    #     pprint(result_dic)
-
     def eval(self,) -> None:
         self.enforce_fine_tune_lang()
 
@@ -354,7 +344,6 @@ class WhisperTrainer:
             data_collator=self.data_collator,
             compute_metrics=self.compute_metrics,
         )
-
         # Evaluate
         print('\n start evaluation!!!!\n')
         result_dic = trainer.evaluate(eval_dataset=test)
@@ -401,6 +390,6 @@ if __name__ =='__main__':
 
 
     whisperClass = WhisperTrainer(config=config)
-    whisperClass.eval()
+    whisperClass.run()
 
 

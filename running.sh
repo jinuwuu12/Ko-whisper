@@ -1,0 +1,1 @@
+ python finetune.py -b openai/whisper-large-v3-turbo -p openai/whisper-large-v3-turbo -ftm .\model_finetuned -train .\data\info\fleurs_transcription_train.csv -valid .\data\info\fleurs_transcription_valid.csv -test .\data\info\fleurs_transcription_test.csv --metric cer

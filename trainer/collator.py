@@ -12,7 +12,10 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         # 서로 다른 길이의 문장 /label 분할 -> 서로 다른 padding size 
         # first treat the audio inputs by simply returning torch tensors
         input_features = [{"input_features": feature["input_features"]} for feature in features]
+
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+        # attention-mask 직접 생성성
+        batch["attention_mask"] = torch.ones(batch["input_features"].shape[:-1], dtype=torch.long)
 
         # get the tokenized label sequences
         label_features = [{"input_ids": feature["labels"]} for feature in features]
