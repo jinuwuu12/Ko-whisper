@@ -1,11 +1,13 @@
 '''
 Fine-tuning whisper (possible: tiny, small, medium, etc.)
+This copy is for clean weight model architecture whisper
 References:
     - Master reference -> https://huggingface.co/blog/fine-tune-whisper
     - Korean blog -> https://velog.io/@mino0121/NLP-OpenAI-Whisper-Fine-tuning-for-Korean-ASR-with-HuggingFace-Transformers
 Written by: Prof. Jin u HA
 License: MIT license
 '''
+
 import argparse
 import pprint
 import numpy as np
@@ -25,6 +27,8 @@ from transformers import (
     WhisperForConditionalGeneration,
     Seq2SeqTrainingArguments,
     Seq2SeqTrainer,
+    WhisperConfig,
+    EarlyStoppingCallback,
     )
 
 def get_config() -> argparse.ArgumentParser:
@@ -129,8 +133,13 @@ class WhisperTrainer:
             task = config.task,
             )
         # 모델 등록
-        self.model = WhisperForConditionalGeneration.from_pretrained(self.pretrained_model)
+        model_config = WhisperConfig.from_pretrained(self.pretrained_model)
+        self.model = WhisperForConditionalGeneration(model_config)
 
+        # ✨ 여기 추가! 자동으로 세팅되는 forced_decoder_ids 제거
+        self.model.config.forced_decoder_ids = None
+        self.model.generation_config.forced_decoder_ids = None
+        
         # Processor 등록 
         self.processor = WhisperProcessor.from_pretrained(
             pretrained_model_name_or_path = config.base_model,
@@ -149,19 +158,19 @@ class WhisperTrainer:
             output_dir = self.output_dir,                   # change to a repo name of your choice
             per_device_train_batch_size = 32,               # select your batch size 
             gradient_accumulation_steps = 1,                # increase by 2x for every 2x decrease in batch size
-            learning_rate=1e-5,
-            warmup_steps=30,                                # transformer는 adam이라는 옵티마이저를 사용 워밍업하는개념
+            learning_rate=5e-4,
+            # warmup_steps=30,                              # transformer는 adam이라는 옵티마이저를 사용 워밍업하는개념
             # max_steps=5000,                               # 에폭 수 설정 해줬을 때는 step 을 없애야한다.  
             gradient_checkpointing=True,
             fp16 = True,                                    # 부동소수점 자릿수 defalut: fp32 -> fp16 학습이 빨라진다고 함(AMP)
             eval_strategy="steps",
-            num_train_epochs=6,                             # epochs 를 지정해주면 max_steps와 비교하여 더 작은 쪽에서 돌아감 혹시나 5000스텝 이상으로 돌아가는 경우에는 
+            num_train_epochs=30,                             # epochs 를 지정해주면 max_steps와 비교하여 더 작은 쪽에서 돌아감 혹시나 5000스텝 이상으로 돌아가는 경우에는 
             per_device_eval_batch_size=16,
             predict_with_generate=True,
             generation_max_length=225,
             save_steps=438,
             eval_steps=438,
-            logging_steps=100,                              # 25 step 마다 output에 저장 (용량이 크니 주의해야함)
+            logging_steps=50,                              # 25 step 마다 output에 저장 (용량이 크니 주의해야함)
             # report_to=["tensorboard"],
             load_best_model_at_end=True,                    # 마지막에 베스트 모델 저장
             metric_for_best_model=config.metric, 
@@ -323,6 +332,7 @@ class WhisperTrainer:
             data_collator = self.data_collator,
             compute_metrics = self.compute_metrics,
             tokenizer=self.processor.feature_extractor,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
         )
 
 
@@ -357,7 +367,7 @@ class WhisperTrainer:
 
     def run(self) -> None:
         '''Run trainer'''
-        self.enforce_fine_tune_lang()
+        # self.enforce_fine_tune_lang()
         dataset = self.load_dataset()
         train, valid, test = self.process_dataset(dataset=dataset)
         trainer = self.create_trainer(train, valid)

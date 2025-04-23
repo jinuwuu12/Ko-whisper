@@ -1,1 +1,4 @@
- python finetune.py -b openai/whisper-large-v3-turbo -p openai/whisper-large-v3-turbo -ftm .\model_finetuned -train .\data\info\fleurs_transcription_train.csv -valid .\data\info\fleurs_transcription_valid.csv -test .\data\info\fleurs_transcription_test.csv --metric cer
+# pre-trained model에 fleurs 데이터 학습 및 테스트 결과 노션에 적어놓음 
+python finetune.py -b openai/whisper-large-v3-turbo -p openai/whisper-large-v3-turbo -ftm .\model_finetuned -train .\data\info\fleurs_transcription_train.csv -valid .\data\info\fleurs_transcription_valid.csv -test .\data\info\fleurs_transcription_test.csv --metric cer
+# 아무것도 없는 생 구조에 fleurs 데이터 학습 테스트 
+python finetune_copy.py -b openai/whisper-small -p openai/whisper-small -ftm .\model_finetuned -train .\data\info\fleurs_transcription_train.csv -valid .\data\info\fleurs_transcription_valid.csv -test .\data\info\fleurs_transcription_test.csv --metric cer
