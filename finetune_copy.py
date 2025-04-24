@@ -139,7 +139,7 @@ class WhisperTrainer:
         # ✨ 여기 추가! 자동으로 세팅되는 forced_decoder_ids 제거
         self.model.config.forced_decoder_ids = None
         self.model.generation_config.forced_decoder_ids = None
-        
+
         # Processor 등록 
         self.processor = WhisperProcessor.from_pretrained(
             pretrained_model_name_or_path = config.base_model,
@@ -177,7 +177,7 @@ class WhisperTrainer:
             greater_is_better=False, 
             push_to_hub=False,                              # push hugging-face hub
         )
-
+        
     def load_dataset(self, )-> DatasetDict:
         '''Build dataset containing train/valid.test sets'''
         dataset = DatasetDict()

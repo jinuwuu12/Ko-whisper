@@ -1,3 +1,4 @@
+import csv
 from datetime import datetime
 import pickle
 from random import shuffle
@@ -6,6 +7,7 @@ import pandas as pd
 import librosa as lr
 import soundfile as sf
 import os
+import re
 from tqdm import tqdm
 from datasets import load_dataset, DatasetDict
 from datasets import Audio
@@ -340,6 +342,78 @@ class LoadHuggingFaceDataset:
 
         print("오디오 파일 저장완료")
 
+    # def remove_unique_words(self, target_file)-> None:
+    #     with open(file=target_file, mode='rt', encoding='utf-8') as f:
+    #         data = f.readlines()
+    #         if target_file.endswith('.csv'):
+    #             header = data[:1]
+    #             lines = data[1:]
+    #         unique_lst = ['o/', 'b/', 'l/','/n','+', '/', 'n', 'u','*',]
+    #         for i in lines:
+    #             lines = i.split(',')[-1]
+    #             if any(tag in lines for tag in unique_lst):
+    #                 included_tags = [tag for tag in unique_lst if tag in lines]
+    #                 for tag in included_tags:
+    #                     sentence = lines
+    #                     for tag in included_tags:
+    #                         sentence = sentence.replace(tag, '')
+    #                         sentence = sentence.strip()
+    #            # 2. 괄호 쌍 구조가 있을 때만 처리
+    #                         if re.search(r'\([^)]+\)/\([^)]+\)', sentence):
+    #                             groups = re.findall(r'\(([^)]+)\)/\([^)]+\)', sentence)
+    #                             sentence = re.sub(r'\([^)]+\)/\([^)]+\)', '', sentence)
+    #                             # 2-3. 단일 괄호도 제거 (혹시 남아있을 경우)
+    #                             sentence = re.sub(r'\([^)]+\)', '', sentence)
+    #                             # 2-4. 특수문자 제거
+    #                             sentence = re.sub(r'[^\w가-힣\s]', '', sentence)
+    #                             # 2-5. 앞에 추출된 그룹 붙이기
+    #                             final_sentence = ' '.join(groups) + ' ' + sentence.strip()
+    #                         else:
+    #                             # 괄호 구조 없으면 단순히 특수문자만 제거
+    #                             sentence = re.sub(r'[^\w가-힣\s]', '', sentence)
+    #                             final_sentence = sentence.strip()
+                                
+    def remove_unique_words(self, target_file) -> None:
+        '''This definition is to remove unique words in dataset'''
+        print('특수문자 제거를 위한 전처리 시작')
+        unique_lst = ['o/', 'b/', 'l/', '/n', '+', '/', 'n', 'u', '*',]
+        pattern = '|'.join(map(re.escape, unique_lst))  # 정규식 패턴 생성
+        with open(target_file, 'rt', encoding='utf-8') as f:
+                    data = f.readlines()
+        if target_file.endswith('.csv'):
+            header = data[:1]
+            lines = data[1:]
+        else:
+            header = []
+            lines = data
+
+        for i in lines:
+            path, original_sentence = i.split(',',1)
+            original_sentence = original_sentence.strip().replace('"', '')
+            original_sentence = re.sub(pattern, '', original_sentence)
+
+            if re.search(r'\([^)]+\)/\([^)]+\)', original_sentence):
+                        groups = re.findall(r'\(([^)]+)\)/\([^)]+\)', original_sentence)
+                        sentence = re.sub(r'\([^)]+\)/\([^)]+\)', '', original_sentence)
+                        final_sentence = ' '.join(groups) + ' ' + sentence.strip()
+                        
+            else:
+                final_sentence = original_sentence.strip()
+
+            final_sentence = re.sub(r'\([^)]+\)\([^)]+\)', lambda m: m.group(0).split(')(')[0] + ')', final_sentence)
+            final_sentence = re.sub(r'\(([^()]+)\)', r'\1', final_sentence)
+
+            new_lines = []
+                    # 3. 경로와 전처리 문장을 다시 합쳐서 저장
+            new_lines.append(f"{path},{final_sentence}\n")
+
+                # 4. 결과를 같은 파일에 저장하거나 새 파일로 저장
+            with open(target_file, 'wt', encoding='utf-8') as f:
+                if header:
+                    f.writelines(header)
+                f.writelines(new_lines)
+
+
 # 테스트를 위한 자기 호출 
 if __name__ == '__main__':
     # audio = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.pcm'
@@ -349,10 +423,16 @@ if __name__ == '__main__':
     # prepareds = PrepareDataset()
     # prepareds.process'_audio(source_dir=source_dir)
     # text_file = r'D:\Whisper\data\audio\KsponSpeech_01\KsponSpeech_0001\KsponSpeech_000001.txt'
+
     # target_file = r'data\audio\KsponSpeech_01'
+
+    # csv 파일 train test 분리
     # prepareds = PrepareDataset()
+    # prepareds.split_train_test(target_file= r'D:\Whisper\data\info\train_KsponSpeech_01.csv')
+
     # prepareds.remove_all_test_files(target_file)
     Dataset = LoadHuggingFaceDataset()
+
     # Dataset.save_dataset_audio(
     #     dataset_name="google/fleurs",
     #     config_name="ko_kr",
@@ -360,10 +440,18 @@ if __name__ == '__main__':
     #     save_dir="./data/audio/fleurs_vaild",
     #     max_samples=None  # 저장할 개수 제한 (None이면 전체 저장)
     # )
-
-    Dataset.save2csv(target_dir=r'data\audio\fleurs_train')
+    # csv로 변환하는 코드 
+    # Dataset.save2csv(target_dir=r'data\audio\fleurs_train')
     
     # 인코딩 확인하는 코드 
     # with open("data/info/fleurs_transcription.csv", "rb") as f:
     #     raw = f.read(10000)  
     #     print(chardet.detect(raw))
+
+    # 특수 문자 제거
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_train.csv')
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_test.csv')
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_clean.csv')
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_other.csv')
+    
+    
