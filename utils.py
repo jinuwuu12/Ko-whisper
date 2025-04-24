@@ -449,9 +449,9 @@ if __name__ == '__main__':
     #     print(chardet.detect(raw))
 
     # 특수 문자 제거
-    Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_train.csv')
-    Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_test.csv')
-    Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_clean.csv')
-    Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_other.csv')
+    # Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_train.csv')
+    # Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_test.csv')
+    # Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_clean.csv')
+    # Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_other.csv')
     
     
