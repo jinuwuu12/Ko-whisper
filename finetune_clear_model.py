@@ -177,41 +177,43 @@ class WhisperTrainer:
             greater_is_better=False, 
             push_to_hub=False,                              # push hugging-face hub
         )
-        
-    def load_dataset(self, )-> DatasetDict:
-        '''Build dataset containing train/valid.test sets'''
-        dataset = DatasetDict()
-        if self.config.train_set:
-            train_df = pd.read_csv(self.config.train_set, encoding='utf-8')
-            dataset['train'] = Dataset.from_pandas(train_df)
-        if self.config.valid_set:
-            valid_df = pd.read_csv(self.config.valid_set, encoding='utf-8')
-            dataset['valid'] = Dataset.from_pandas(valid_df)
-        if self.config.test_set:
-            test_df = pd.read_csv(self.config.test_set, encoding='utf-8')
-            dataset['test'] = Dataset.from_pandas(test_df)
-        return dataset
-    
-        # dataset['train'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.train_set,
-        # )
-        # dataset['valid'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.valid_set,
-        # )
-        # dataset['test'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.test_set,
-        # )
-        # print(dataset['train']['path'][0])
+
+     
+    def load_dataset(self, )-> DatasetDict:                  
+        # '''Build dataset containing train/valid.test sets'''
+        # '''이거 RAM 터지는 방법임 데이터 셋이 커지면 램터짐 사용불가함,'''  
+        # dataset = DatasetDict()
+        # if self.config.train_set:
+        #     train_df = pd.read_csv(self.config.train_set, encoding='utf-8')
+        #     dataset['train'] = Dataset.from_pandas(train_df)
+        # if self.config.valid_set:
+        #     valid_df = pd.read_csv(self.config.valid_set, encoding='utf-8')
+        #     dataset['valid'] = Dataset.from_pandas(valid_df)
+        # if self.config.test_set:
+        #     test_df = pd.read_csv(self.config.test_set, encoding='utf-8')
+        #     dataset['test'] = Dataset.from_pandas(test_df)
         # return dataset
+        dataset = DatasetDict()
+        dataset['train'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.train_set,
+        )
+        dataset['valid'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.valid_set,
+        )
+        dataset['test'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.test_set,
+        )
+        print(dataset['train']['path'][0])
+        return dataset
 
     # chracter morphs 별 metric 
     def compute_metrics(self, pred) -> dict:
@@ -242,7 +244,7 @@ class WhisperTrainer:
         batch["input_features"] = self.feature_extractor(
             audio_array, 
             sampling_rate = self.config.sampling_rate
-            ).input_features[0] # 왜 0번째를 들고와?? 이거 ㄹㅇ 코드 까봐야함 
+            ).input_features[0].tolist() # 왜 0번째를 들고와?? 이거 ㄹㅇ 코드 까봐야함 
         
         # tokenize sentence (with attention mask)
         masked = self.tokenizer(
@@ -255,8 +257,8 @@ class WhisperTrainer:
         )
         # encode target text to label ids 
         # batch["labels"] = self.tokenizer(batch["sentence"]).input_ids
-        batch["labels"] = masked.input_ids[0]
-        batch["label_attention_mask"] = masked.attention_mask[0]
+        batch["labels"] = masked.input_ids[0].tolist()
+        batch["label_attention_mask"] = masked.attention_mask[0].tolist()
 
         return batch
 
@@ -278,26 +280,26 @@ class WhisperTrainer:
     def process_dataset(self, dataset: DatasetDict) -> tuple:
         train = valid = test = None
 
-        # 왜 cpu 코어 16개를 쓸때보다 4개를 쓸때가 더 빠른가.. 멍청한 컴퓨터녀석
+        # 왜 cpu 코어 16개를 쓸때보다 4개를 쓸때가 더 빠른가.. 멍청한 컴퓨터녀석 -> 오버헤드가 발생하여 16코어를 사용할시에 더욱 속도가 느려질 수 있음.
         if 'train' in dataset:
             train = dataset['train'].map(
                 function=self.prepare_dataset,
-                remove_columns=dataset['train'].column_names,
-                num_proc=16,
+                # remove_columns=dataset['train'].column_names,
+                num_proc=4,
                 load_from_cache_file=False
             )
         if 'valid' in dataset:
             valid = dataset['valid'].map(
                 function=self.prepare_dataset,
-                remove_columns=dataset['valid'].column_names,
-                num_proc=16,
+                # remove_columns=dataset['valid'].column_names,
+                num_proc=4,
                 load_from_cache_file=False
             )
         if 'test' in dataset:
             test = dataset['test'].map(
                 function=self.prepare_dataset,
-                remove_columns=dataset['test'].column_names,
-                num_proc=16,
+                # remove_columns=dataset['test'].column_names,
+                num_proc=4,
                 load_from_cache_file=False
             )
 

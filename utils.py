@@ -343,7 +343,7 @@ class LoadHuggingFaceDataset:
         print("오디오 파일 저장완료")
 
     def remove_unique_words(self, target_file: str) -> None:
-        unique_lst = ['o/', 'b/', 'l/', '/n', '+', 'n', 'u', '*','/',')']
+        unique_lst = ['o/', 'b/', 'l/', '/n', '+', 'n', 'u', '*','/',')','.']
         all_pattern = '|'.join(map(re.escape, unique_lst))  # 정규식 패턴 생성
 
         with open(target_file, 'rt', encoding='utf-8') as f:
@@ -356,10 +356,13 @@ class LoadHuggingFaceDataset:
         for i in lines:
             path, original_sentence = i.split(',',1)
             original_sentence = original_sentence.strip().replace('"','')
+            original_sentence = original_sentence.replace(',', '')
             sub_pattern = r'\(([^/]+)/[^)]*\)' # 앞에 것만 남기기기
             result = re.sub(sub_pattern, r'\1', original_sentence)
             final_sentence = re.sub(all_pattern,'', result)
+            final_sentence = re.sub('  ',' ',final_sentence)
             final_sentence = final_sentence.strip()
+            final_sentence = f'"{final_sentence}"'
 
             new_sentences.append(f"{path},{final_sentence}\n")
 
@@ -408,9 +411,9 @@ if __name__ == '__main__':
     #     print(chardet.detect(raw))
 
     # 특수 문자 제거
-    # Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_train.csv')
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_train.csv')
     Dataset.remove_unique_words(r'D:\Whisper\data\info\train_KsponSpeech_01_test.csv')
-    # Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_clean.csv')
+    Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_clean.csv')
     # Dataset.remove_unique_words(r'D:\Whisper\data\info\eval_other.csv')
     
     
