@@ -8,4 +8,8 @@ python finetune_copy.py -b openai/whisper-large-v3-turbo -p openai/whisper-large
 # 전처리 한 ksponspeech를 large-v3-turbo에 학습
 python finetune_copy.py -b openai/whisper-large-v3-turbo -p openai/whisper-large-v3-turbo -ftm .\model_finetuned -train data/info/train_KsponSpeech_01_train.csv -valid data/info/train_KsponSpeech_01_test.csv -test data/info/fleurs_transcription_test.csv --metric cer
 # ksponspeech 전처리를 whisper에 학습 된 데이터와 비슷하게 해서 학습예정.(small)
-python finetune_copy.py -b openai/whisper-small -p openai/whisper-small -ftm .\model_finetuned -train data/info/train_KsponSpeech_01_train.csv -valid data/info/train_KsponSpeech_01_test.csv -test data/info/eval_clean.csv --metric cer
+python finetune_clear_model.py -b openai/whisper-small -p openai/whisper-small -ftm .\model_finetuned -train data/info/train_KsponSpeech_01_train.csv -valid data/info/train_KsponSpeech_01_test.csv -test data/info/eval_clean.csv --metric cer
+
+
+
+# turbo 모델에 전처리 한 KsponSpeech 데이터 파인튜닝

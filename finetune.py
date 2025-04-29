@@ -16,7 +16,7 @@ from datasets import load_dataset, DatasetDict, Dataset
 from trainer.collator import DataCollatorSpeechSeq2SeqWithPadding
 from utils import get_unique_directory
 from scipy.io.wavfile import read
-
+from train_args import get_training_arguments
 
 from transformers import (
     WhisperFeatureExtractor, 
@@ -25,6 +25,7 @@ from transformers import (
     WhisperForConditionalGeneration,
     Seq2SeqTrainingArguments,
     Seq2SeqTrainer,
+    EarlyStoppingCallback,
     )
 
 def get_config() -> argparse.ArgumentParser:
@@ -98,7 +99,7 @@ class WhisperTrainer:
         # Base model -> tokenizer, feature_exrtactor ,processor
         # pre-trained model -> model for fine-tuning
 
-        if config.pretrained_model == True:
+        if config.pretrained_model != "":
             self.pretrained_model = config.pretrained_model
         else:
             print('Pre-trained model is not given....')
@@ -145,64 +146,45 @@ class WhisperTrainer:
         )
 
         # train args 등록록
-        self.training_args = Seq2SeqTrainingArguments(
-            output_dir = self.output_dir,                   # change to a repo name of your choice
-            per_device_train_batch_size = 32,               # select your batch size 
-            gradient_accumulation_steps = 1,                # increase by 2x for every 2x decrease in batch size
-            learning_rate=1e-5,
-            warmup_steps=10,                                # transformer는 adam이라는 옵티마이저를 사용 워밍업하는개념
-            max_steps=5000,                               # 에폭 수 설정 해줬을 때는 step 을 없애야한다.  
-            gradient_checkpointing=True,
-            fp16 = True,                                    # 부동소수점 자릿수 defalut: fp32 -> fp16 학습이 빨라진다고 함(AMP)
-            eval_strategy="steps",
-            # num_train_epochs=6,                           # epochs 를 지정해주면 max_steps와 비교하여 더 작은 쪽에서 돌아감 혹시나 5000스텝 이상으로 돌아가는 경우에는 
-            per_device_eval_batch_size=16,
-            predict_with_generate=True,
-            generation_max_length=225,
-            save_steps=1000,
-            eval_steps=1000,
-            logging_steps=1000,                              # 25 step 마다 output에 저장 (용량이 크니 주의해야함)
-            # report_to=["tensorboard"],
-            load_best_model_at_end=True,                    # 마지막에 베스트 모델 저장
-            metric_for_best_model=config.metric, 
-            greater_is_better=False, 
-            push_to_hub=False,                              # push hugging-face hub
+        self.training_args = get_training_arguments(
+            output_dir=self.output_dir,
+            metric=self.config.metric
         )
 
     def load_dataset(self, )-> DatasetDict:
         '''Build dataset containing train/valid.test sets'''
         dataset = DatasetDict()
-        if self.config.train_set:
-            train_df = pd.read_csv(self.config.train_set, encoding='utf-8')
-            dataset['train'] = Dataset.from_pandas(train_df)
-        if self.config.valid_set:
-            valid_df = pd.read_csv(self.config.valid_set, encoding='utf-8')
-            dataset['valid'] = Dataset.from_pandas(valid_df)
-        if self.config.test_set:
-            test_df = pd.read_csv(self.config.test_set, encoding='utf-8')
-            dataset['test'] = Dataset.from_pandas(test_df)
-        return dataset
-    
-        # dataset['train'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.train_set,
-        # )
-        # dataset['valid'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.valid_set,
-        # )
-        # dataset['test'] = load_dataset(
-        #     path='csv',
-        #     name='aihub-ksponSpeech_dataset',
-        #     split='train',
-        #     data_files=self.config.test_set,
-        # )
-        # print(dataset['train']['path'][0])
+        # if self.config.train_set:
+        #     train_df = pd.read_csv(self.config.train_set, encoding='utf-8')
+        #     dataset['train'] = Dataset.from_pandas(train_df)
+        # if self.config.valid_set:
+        #     valid_df = pd.read_csv(self.config.valid_set, encoding='utf-8')
+        #     dataset['valid'] = Dataset.from_pandas(valid_df)
+        # if self.config.test_set:
+        #     test_df = pd.read_csv(self.config.test_set, encoding='utf-8')
+        #     dataset['test'] = Dataset.from_pandas(test_df)
         # return dataset
+    
+        dataset['train'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.train_set,
+        )
+        dataset['valid'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.valid_set,
+        )
+        dataset['test'] = load_dataset(
+            path='csv',
+            name='aihub-ksponSpeech_dataset',
+            split='train',
+            data_files=self.config.test_set,
+        )
+
+        return dataset
 
     # chracter morphs 별 metric 
     def compute_metrics(self, pred) -> dict:
@@ -251,19 +233,6 @@ class WhisperTrainer:
 
         return batch
 
-    # def process_dataset(self, dataset: DatasetDict) -> tuple:
-        '''Process loaded dataset applying prepare_dataset()'''
-        # num_proc는 cpu 코어 갯수에 따라 달라짐
-        print(dataset['train'])
-        train = dataset['train'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['train'], num_proc=16)
-        print(f'train cache file root :{train.cache_files}')
-        print(dataset['valid'])
-        valid = dataset['valid'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['valid'], num_proc=16)
-        print(f'valid cache file root :{valid.cache_files}')
-        print(dataset['test'])
-        test = dataset['test'].map(function = self.prepare_dataset, remove_columns=dataset.column_names['test'], num_proc=16)
-        
-        return (train, valid, test)
     
     # 조건부 process_dataset
     def process_dataset(self, dataset: DatasetDict) -> tuple:
@@ -274,21 +243,21 @@ class WhisperTrainer:
             train = dataset['train'].map(
                 function=self.prepare_dataset,
                 remove_columns=dataset['train'].column_names,
-                num_proc=16,
+                num_proc=8,
                 load_from_cache_file=False
             )
         if 'valid' in dataset:
             valid = dataset['valid'].map(
                 function=self.prepare_dataset,
                 remove_columns=dataset['valid'].column_names,
-                num_proc=16,
+                num_proc=8,
                 load_from_cache_file=False
             )
         if 'test' in dataset:
             test = dataset['test'].map(
                 function=self.prepare_dataset,
                 remove_columns=dataset['test'].column_names,
-                num_proc=16,
+                num_proc=8,
                 load_from_cache_file=False
             )
 
@@ -323,6 +292,7 @@ class WhisperTrainer:
             data_collator = self.data_collator,
             compute_metrics = self.compute_metrics,
             tokenizer=self.processor.feature_extractor,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)], # 성능 향상이 3번 평가 연속으로 없으면 멈추는 부분분
         )
 
 
